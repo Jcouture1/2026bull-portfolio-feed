@@ -1,0 +1,76 @@
+name: Update Portfolio Feed
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "*/5 * * * *"
+
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: portfolio-pages
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Create public directory
+        run: mkdir -p public
+
+      - name: Fetch portfolio feed
+        run: |
+          curl --fail --silent --show-error \
+            "https://2026bull-portfolio-oracle.vercel.app/api/feed" \
+            -o public/portfolio.json
+
+      - name: Validate JSON
+        run: |
+          jq -e '.status == "ok"' public/portfolio.json > /dev/null
+          jq -e '.privacy.walletAddressesIncluded == false' public/portfolio.json > /dev/null
+          jq -e '.privacy.apiKeysIncluded == false' public/portfolio.json > /dev/null
+          jq -e '.privacy.signingCapability == false' public/portfolio.json > /dev/null
+
+      - name: Create landing page
+        run: |
+          cat > public/index.html <<'EOF'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>2026Bull Portfolio Feed</title>
+            </head>
+            <body>
+              <h1>2026Bull Portfolio Feed</h1>
+              <p><a href="./portfolio.json">portfolio.json</a></p>
+            </body>
+          </html>
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
