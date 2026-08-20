@@ -55,6 +55,30 @@ jobs:
           jq '.' public/portfolio.json > public/portfolio.pretty.json
           mv public/portfolio.pretty.json public/portfolio.json
 
+      - name: Create readable portfolio feed
+        run: |
+          {
+            echo "UPDATED_AT: $(jq -r '.updatedAt' public/portfolio.json)"
+            echo "KNOWN_VALUE_USD: $(jq -r '.summary.knownValueUsd' public/portfolio.json)"
+            echo "PRICED_POSITIONS: $(jq -r '.summary.pricedPositions' public/portfolio.json)"
+            echo "UNPRICED_POSITIONS: $(jq -r '.summary.unpricedPositions' public/portfolio.json)"
+            echo "UNIQUE_ASSETS: $(jq -r '.summary.uniqueAssets' public/portfolio.json)"
+            echo ""
+            echo "POSITIONS"
+            echo -e "SYMBOL\tNAME\tCHAIN\tBALANCE\tPRICE_USD\tVALUE_USD\tCHANGE_24H\tLIQUIDITY_USD"
+            jq -r '.positions[] |
+              [
+                .symbol,
+                .name,
+                .chain,
+                (.balance | tostring),
+                ((.priceUsd // "UNPRICED") | tostring),
+                ((.valueUsd // "UNPRICED") | tostring),
+                ((.priceChange24h // "NA") | tostring),
+                ((.liquidityUsd // "NA") | tostring)
+              ] | @tsv' public/portfolio.json
+          } > public/portfolio.txt
+
       - name: Create landing page
         run: |
           cat > public/index.html <<'EOF'
@@ -67,6 +91,7 @@ jobs:
             <body>
               <h1>2026Bull Portfolio Feed</h1>
               <p><a href="./portfolio.json">portfolio.json</a></p>
+              <p><a href="./portfolio.txt">portfolio.txt</a></p>
             </body>
           </html>
           EOF
