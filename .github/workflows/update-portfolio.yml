@@ -50,6 +50,11 @@ jobs:
           jq -e '.privacy.apiKeysIncluded == false' public/portfolio.json > /dev/null
           jq -e '.privacy.signingCapability == false' public/portfolio.json > /dev/null
 
+      - name: Pretty-print portfolio JSON
+        run: |
+          jq '.' public/portfolio.json > public/portfolio.pretty.json
+          mv public/portfolio.pretty.json public/portfolio.json
+
       - name: Create landing page
         run: |
           cat > public/index.html <<'EOF'
