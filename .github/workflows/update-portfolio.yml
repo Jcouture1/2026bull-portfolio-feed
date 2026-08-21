@@ -11,7 +11,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -177,3 +177,23 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Publish raw feed branch
+        run: |
+          cp public/portfolio.json /tmp/portfolio.json
+          cp public/portfolio.txt /tmp/portfolio.txt
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout --orphan live-feed
+
+          git rm -rf . >/dev/null 2>&1 || true
+
+          cp /tmp/portfolio.json ./portfolio.json
+          cp /tmp/portfolio.txt ./portfolio.txt
+
+          git add portfolio.json portfolio.txt
+          git commit -m "Update live portfolio feed"
+
+          git push --force origin live-feed
