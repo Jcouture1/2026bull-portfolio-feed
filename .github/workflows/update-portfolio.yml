@@ -37,46 +37,119 @@ jobs:
       - name: Create public directory
         run: mkdir -p public
 
-      - name: Fetch portfolio feed
+      - name: Fetch wallet portfolio
         run: |
           curl --fail --silent --show-error \
             "https://2026bull-portfolio-oracle.vercel.app/api/feed" \
             -o public/portfolio.json
 
-      - name: Validate JSON
+      - name: Fetch Pacifica account
+        run: |
+          curl --fail --silent --show-error \
+            "https://2026bull-portfolio-oracle.vercel.app/api/pacifica" \
+            -o /tmp/pacifica.json
+
+      - name: Validate wallet feed
         run: |
           jq -e '.status == "ok"' public/portfolio.json > /dev/null
           jq -e '.privacy.walletAddressesIncluded == false' public/portfolio.json > /dev/null
           jq -e '.privacy.apiKeysIncluded == false' public/portfolio.json > /dev/null
           jq -e '.privacy.signingCapability == false' public/portfolio.json > /dev/null
 
-      - name: Pretty-print portfolio JSON
+      - name: Validate Pacifica feed
         run: |
-          jq '.' public/portfolio.json > public/portfolio.pretty.json
-          mv public/portfolio.pretty.json public/portfolio.json
+          jq -e '.status == "ok"' /tmp/pacifica.json > /dev/null
+          jq -e '.safety.walletAddressIncluded == false' /tmp/pacifica.json > /dev/null
+          jq -e '.safety.privateKeyRequired == false' /tmp/pacifica.json > /dev/null
+          jq -e '.safety.signingCapability == false' /tmp/pacifica.json > /dev/null
 
       - name: Create readable portfolio feed
         run: |
+          WALLET_VALUE=$(jq -r '.summary.knownValueUsd' public/portfolio.json)
+          PACIFICA_EQUITY=$(jq -r '.account.equity' /tmp/pacifica.json)
+
+          TOTAL_VALUE=$(jq -n \
+            --argjson wallet "$WALLET_VALUE" \
+            --argjson pacifica "$PACIFICA_EQUITY" \
+            '$wallet + $pacifica')
+
           {
+            echo "2026BULL PORTFOLIO"
+            echo "=================="
+            echo ""
             echo "UPDATED_AT: $(jq -r '.updatedAt' public/portfolio.json)"
-            echo "KNOWN_VALUE_USD: $(jq -r '.summary.knownValueUsd' public/portfolio.json)"
+            echo "WALLET_KNOWN_VALUE_USD: $WALLET_VALUE"
+            echo "PACIFICA_EQUITY_USD: $PACIFICA_EQUITY"
+            echo "TOTAL_TRACKED_VALUE_USD: $TOTAL_VALUE"
             echo "PRICED_POSITIONS: $(jq -r '.summary.pricedPositions' public/portfolio.json)"
             echo "UNPRICED_POSITIONS: $(jq -r '.summary.unpricedPositions' public/portfolio.json)"
             echo "UNIQUE_ASSETS: $(jq -r '.summary.uniqueAssets' public/portfolio.json)"
             echo ""
-            echo "POSITIONS"
-            echo -e "SYMBOL\tNAME\tCHAIN\tBALANCE\tPRICE_USD\tVALUE_USD\tCHANGE_24H\tLIQUIDITY_USD"
-            jq -r '.positions[] |
-              [
-                .symbol,
-                .name,
-                .chain,
-                (.balance | tostring),
-                ((.priceUsd // "UNPRICED") | tostring),
-                ((.valueUsd // "UNPRICED") | tostring),
-                ((.priceChange24h // "NA") | tostring),
-                ((.liquidityUsd // "NA") | tostring)
-              ] | @tsv' public/portfolio.json
+            echo "WALLET POSITIONS"
+            echo "================"
+            echo -e "CHAIN\tSYMBOL\tNAME\tCONTRACT\tBALANCE\tPRICE_USD\tVALUE_USD\t24H_PCT\tLIQUIDITY_USD"
+
+            jq -r '
+              .positions
+              | sort_by(-(.valueUsd // -1))
+              | .[]
+              | [
+                  (.chain // ""),
+                  (.symbol // ""),
+                  (.name // ""),
+                  (.tokenAddress // "native"),
+                  (.balance | tostring),
+                  ((.priceUsd // "UNPRICED") | tostring),
+                  ((.valueUsd // "UNPRICED") | tostring),
+                  ((.priceChange24h // "") | tostring),
+                  ((.liquidityUsd // "") | tostring)
+                ]
+              | @tsv
+            ' public/portfolio.json
+
+            echo ""
+            echo "PACIFICA"
+            echo "========"
+            echo "EQUITY_USD: $(jq -r '.account.equity' /tmp/pacifica.json)"
+            echo "BALANCE_USD: $(jq -r '.account.balance' /tmp/pacifica.json)"
+            echo "AVAILABLE_TO_SPEND_USD: $(jq -r '.account.availableToSpend' /tmp/pacifica.json)"
+            echo "AVAILABLE_TO_WITHDRAW_USD: $(jq -r '.account.availableToWithdraw' /tmp/pacifica.json)"
+            echo "MARGIN_USED_USD: $(jq -r '.account.marginUsed' /tmp/pacifica.json)"
+            echo "MARGIN_USED_VS_EQUITY_PCT: $(jq -r '.account.marginUsedVsEquityPct' /tmp/pacifica.json)"
+            echo "MAINTENANCE_MARGIN_USD: $(jq -r '.account.maintenanceMargin' /tmp/pacifica.json)"
+            echo "POSITIONS_COUNT: $(jq -r '.account.positionsCount' /tmp/pacifica.json)"
+            echo "OPEN_ORDERS_COUNT: $(jq -r '.account.ordersCount' /tmp/pacifica.json)"
+            echo "STOP_ORDERS_COUNT: $(jq -r '.account.stopOrdersCount' /tmp/pacifica.json)"
+            echo ""
+            echo "PACIFICA POSITIONS"
+            echo "=================="
+            echo -e "SYMBOL\tSIDE\tAMOUNT\tENTRY\tMARK\tNOTIONAL_USD\tUNREALIZED_PNL_USD\tLIQUIDATION\tLIQ_DISTANCE_PCT\tFUNDING_NOW\tFUNDING_NEXT"
+
+            jq -r '
+              .positions[]
+              | [
+                  (.symbol // ""),
+                  (.side // ""),
+                  (.amount | tostring),
+                  (.entryPrice | tostring),
+                  (.markPrice | tostring),
+                  (.notionalUsd | tostring),
+                  (.unrealizedPnlUsd | tostring),
+                  (.liquidationPrice | tostring),
+                  (.liquidationDistancePct | tostring),
+                  (.currentFundingRate | tostring),
+                  (.nextFundingRate | tostring)
+                ]
+              | @tsv
+            ' /tmp/pacifica.json
+
+            echo ""
+            echo "SAFETY"
+            echo "======"
+            echo "WALLET_ADDRESSES_INCLUDED: false"
+            echo "API_KEYS_INCLUDED: false"
+            echo "SIGNING_CAPABILITY: false"
+
           } > public/portfolio.txt
 
       - name: Create landing page
@@ -90,8 +163,8 @@ jobs:
             </head>
             <body>
               <h1>2026Bull Portfolio Feed</h1>
-              <p><a href="./portfolio.json">portfolio.json</a></p>
               <p><a href="./portfolio.txt">portfolio.txt</a></p>
+              <p><a href="./portfolio.json">portfolio.json</a></p>
             </body>
           </html>
           EOF
