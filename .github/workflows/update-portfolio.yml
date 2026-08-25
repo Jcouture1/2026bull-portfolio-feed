@@ -82,6 +82,7 @@ jobs:
 
           SOLANA_VALUE="UNAVAILABLE"
           ROBINHOOD_VALUE="UNAVAILABLE"
+          NFT_VALUE="UNAVAILABLE"
 
           if [ "$WALLET_OK" = "true" ]; then
             if [ "$(jq -r '.summary.bySource.solana.complete // false' public/portfolio.json)" = "true" ]; then
@@ -90,6 +91,10 @@ jobs:
 
             if [ "$(jq -r '.summary.bySource.robinhood.complete // false' public/portfolio.json)" = "true" ]; then
               ROBINHOOD_VALUE=$(jq -r '.summary.bySource.robinhood.valueUsd // 0' public/portfolio.json)
+            fi
+
+            if [ "$(jq -r '.summary.bySource.nft.complete // false' public/portfolio.json)" = "true" ]; then
+              NFT_VALUE=$(jq -r '.summary.bySource.nft.valueUsd // 0' public/portfolio.json)
             fi
 
             while IFS= read -r source; do
@@ -110,6 +115,7 @@ jobs:
           TOTAL_VALUE=0
           [ "$SOLANA_VALUE" != "UNAVAILABLE" ] && TOTAL_VALUE=$(jq -n --argjson a "$TOTAL_VALUE" --argjson b "$SOLANA_VALUE" '$a + $b')
           [ "$ROBINHOOD_VALUE" != "UNAVAILABLE" ] && TOTAL_VALUE=$(jq -n --argjson a "$TOTAL_VALUE" --argjson b "$ROBINHOOD_VALUE" '$a + $b')
+          [ "$NFT_VALUE" != "UNAVAILABLE" ] && TOTAL_VALUE=$(jq -n --argjson a "$TOTAL_VALUE" --argjson b "$NFT_VALUE" '$a + $b')
           [ "$PACIFICA_VALUE" != "UNAVAILABLE" ] && TOTAL_VALUE=$(jq -n --argjson a "$TOTAL_VALUE" --argjson b "$PACIFICA_VALUE" '$a + $b')
 
           if [ ${#MISSING[@]} -eq 0 ]; then
@@ -132,6 +138,7 @@ jobs:
             echo ""
             echo "SOLANA_VALUE_USD: $SOLANA_VALUE"
             echo "ROBINHOOD_VALUE_USD: $ROBINHOOD_VALUE"
+            echo "NFT_VALUE_USD: $NFT_VALUE"
             echo "PACIFICA_EQUITY_USD: $PACIFICA_VALUE"
             echo ""
             echo "TOTAL_KNOWN_VALUE_USD: $TOTAL_VALUE"
@@ -162,6 +169,25 @@ jobs:
                     ((.valueUsd // "UNPRICED") | tostring),
                     ((.priceChange24h // "") | tostring),
                     ((.liquidityUsd // "") | tostring)
+                  ]
+                | @tsv
+              ' public/portfolio.json
+
+              echo ""
+              echo "NFT HOLDINGS"
+              echo "============"
+              echo -e "LABEL\tCONTRACT\tQUANTITY\tFLOOR_NATIVE\tFLOOR_USD\tVALUE_USD\tSTATUS"
+
+              jq -r '
+                .nftHoldings[]?
+                | [
+                    (.label // ""),
+                    (.contract // ""),
+                    (.quantity | tostring),
+                    ((.floorPriceNative // "UNAVAILABLE") | tostring),
+                    ((.floorPriceUsd // "UNAVAILABLE") | tostring),
+                    ((.valueUsd // "UNAVAILABLE") | tostring),
+                    (.status // "")
                   ]
                 | @tsv
               ' public/portfolio.json
