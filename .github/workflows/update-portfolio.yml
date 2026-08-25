@@ -191,6 +191,19 @@ jobs:
                   ]
                 | @tsv
               ' public/portfolio.json
+
+              echo ""
+              echo "QUARANTINED TOKENS"
+              echo "=================="
+
+              if [ "$(jq -r '(.quarantined // []) | length' public/portfolio.json)" = "0" ]; then
+                echo "none"
+              else
+                jq -r '
+                  .quarantined[]
+                  | "SYMBOL: \(.symbol // "UNKNOWN")\nCONTRACT: \(.contract // "")\nWALLET: \(.wallet // "")\nSECURITY_STATUS: \(.securityStatus // "QUARANTINED")\nPRICE_USD: \(.priceUsd // "ignored")\nVALUE_USD: \(.valueUsd // 0)\nINCLUDED_IN_TOTAL: \(.includedInTotal // false)\nREASON: \(.reason // "")\n"
+                ' public/portfolio.json
+              fi
             else
               echo ""
               echo "WALLET POSITIONS: UNAVAILABLE THIS CYCLE"
