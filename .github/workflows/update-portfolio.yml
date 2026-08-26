@@ -183,7 +183,7 @@ jobs:
                 | [
                     (.label // ""),
                     (.contract // ""),
-                    (.quantity | tostring),
+                    ((.quantity // "UNAVAILABLE") | tostring),
                     ((.floorPriceNative // "UNAVAILABLE") | tostring),
                     ((.floorPriceUsd // "UNAVAILABLE") | tostring),
                     ((.valueUsd // "UNAVAILABLE") | tostring),
