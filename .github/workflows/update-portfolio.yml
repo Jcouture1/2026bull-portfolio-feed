@@ -293,14 +293,38 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # Carry the running daily-snapshot history forward before the
+          # branch gets reset below, appending today's total once per
+          # UTC day (this step runs every 15-45 min, so most runs are a
+          # no-op here — only the first one after midnight UTC appends).
+          # Only a fully-complete cycle is recorded, so a transient
+          # outage never gets logged as a fake low.
+          git fetch origin live-feed
+          git show origin/live-feed:history.json > /tmp/history.json 2>/dev/null || echo '[]' > /tmp/history.json
+
+          TOTAL_VALUE=$(grep -m1 '^TOTAL_KNOWN_VALUE_USD:' /tmp/portfolio.txt | cut -d' ' -f2)
+          TOTAL_COMPLETE=$(grep -m1 '^TOTAL_COMPLETE:' /tmp/portfolio.txt | cut -d' ' -f2)
+          TODAY=$(date -u +%Y-%m-%d)
+
+          if [ "$TOTAL_COMPLETE" = "true" ] && [ -n "$TOTAL_VALUE" ]; then
+            ALREADY_LOGGED=$(jq -r --arg d "$TODAY" 'any(.[]; .date == $d)' /tmp/history.json)
+
+            if [ "$ALREADY_LOGGED" != "true" ]; then
+              jq --arg d "$TODAY" --argjson v "$TOTAL_VALUE" \
+                '. + [{date: $d, totalUsd: $v}]' /tmp/history.json > /tmp/history_new.json
+              mv /tmp/history_new.json /tmp/history.json
+            fi
+          fi
+
           git checkout --orphan live-feed
 
           git rm -rf . >/dev/null 2>&1 || true
 
           cp /tmp/portfolio.json ./portfolio.json
           cp /tmp/portfolio.txt ./portfolio.txt
+          cp /tmp/history.json ./history.json
 
-          git add portfolio.json portfolio.txt
+          git add portfolio.json portfolio.txt history.json
           git commit -m "Update live portfolio feed"
 
           git push --force origin live-feed
